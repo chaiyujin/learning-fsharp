@@ -37,9 +37,9 @@ let sumOfSquaresTo100withFun =
 let simplePatternMatch = 
     let x = "a"
     match x with
-     | "a" -> printfn "x is a"
-     | "b" -> printfn "x is b"
-     | _ -> printfn "x is something else"
+    | "a" -> printfn "x is a"
+    | "b" -> printfn "x is b"
+    | _ -> printfn "x is something else"
 
 simplePatternMatch
 
@@ -49,8 +49,8 @@ let invalidValue = None
 
 let optionPatternMatch input = 
     match input with
-     | Some i -> printfn "input is an int=%d" i
-     | None   -> printfn "input is missing"
+    | Some i -> printfn "input is an int=%d" i
+    | None   -> printfn "input is missing"
 
 optionPatternMatch validValue
 optionPatternMatch invalidValue
@@ -64,13 +64,13 @@ let person1 = {First="john"; Last="Doe"}
 
 // Union types have choices. Vertical bars are separators
 type Temp = 
-        | DegreesC of float
-        | DegreesF of float
+    | DegreesC of float
+    | DegreesF of float
 let temp = DegreesF 98.6
 
 type Employee = 
-        | Worker of Person
-        | Manager of Employee list
+    | Worker of Person
+    | Manager of Employee list
 
 let jdoe = {First="John"; Last="Doe"}
 let worker = Worker jdoe
@@ -82,3 +82,8 @@ printfn "A string %s, and something generic %A" "hello, world!" [1;2;3;4]
 // complex types
 printfn "twoTuple=%A\nPerson=%A\nTemp=%A\nEmployee=%A\n"
         twoTuple person1 temp worker
+
+// === List functions ===
+// List.iter fun :  run function and return nothin
+// List.map  fun :   run function and return a list
+// List.partition fun : run function (return bool), partition into two parts, true part, and false part.
