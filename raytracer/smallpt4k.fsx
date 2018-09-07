@@ -1,10 +1,12 @@
 open System.IO
 open System
+open System.Threading
+open System.Threading.Tasks
 
 
 // === global size ===
 let (gWidth, gHeight) = (320, 240)
-let gSamples = 4
+let gSamples = 64
 // === IO functions ===
 let createImageCanvas (w, h) : int array = Array.zeroCreate (w * h * 3)
 let writeImage (path, w, h, img) =
@@ -27,11 +29,11 @@ type Vec (x:float, y:float, z:float) =
 
     static member inline Zero() = Vec(0.0, 0.0, 0.0)
     static member inline get_Zero() = Vec(0.0, 0.0, 0.0)
-    static member inline ( + ) (v1: Vec, v2: Vec) = Vec(v1.X + v2.X, v1.Y + v2.Y, v1.Z + v1.Z)
-    static member inline ( - ) (v1: Vec, v2: Vec) = Vec(v1.X - v2.X, v1.Y - v2.Y, v1.Z - v1.Z)
-    static member inline ( * ) (v1: Vec, b: float) = Vec(v1.X * b, v1.Y * b, v1.Z * b)
-    static member inline ( * ) (v1: Vec, v2: Vec) = Vec(v1.X * v2.X, v1.Y * v2.Y, v1.Z * v2.Z)
-    member inline this.Norm() = this * (1.0 / (this.X * this.X + this.Y * this.Y + this.Z * this.Z))
+    static member inline ( + ) (v1: Vec, v2: Vec)  = Vec(v1.X + v2.X, v1.Y + v2.Y, v1.Z + v2.Z)
+    static member inline ( - ) (v1: Vec, v2: Vec)  = Vec(v1.X - v2.X, v1.Y - v2.Y, v1.Z - v2.Z)
+    static member inline ( * ) (v1: Vec, b: float) = Vec(v1.X * b,    v1.Y * b,    v1.Z * b)
+    static member inline ( * ) (v1: Vec, v2: Vec)  = Vec(v1.X * v2.X, v1.Y * v2.Y, v1.Z * v2.Z)
+    member inline this.Norm() = this * (1.0 / sqrt(this.X * this.X + this.Y * this.Y + this.Z * this.Z))
     member inline this.Dot(b:Vec):float = this.X * b.X + this.Y * b.Y + this.Z * b.Z
     member inline this.Cross(b:Vec): Vec = Vec(this.Y*b.Z-this.Z*b.Y, this.Z*b.X-this.X*b.Z, this.X*b.Y-this.Y*b.X)
 
@@ -73,7 +75,7 @@ let spheres = [
 ]
 // === helper functions ===
 let clamp (x:float):float = match x < 0.0 with | true -> 0.0 | false -> match x > 1.0 with | true -> 1.0 | false -> x
-let toInt (x:float):int = int x
+let toInt (x:float):int = int (Math.Pow(clamp(x),1.0/2.2)*255.0+0.5)
 let intersect (ray:Ray) =
     let testResult = spheres |> List.map (fun x -> x.Intersect(ray))
     testResult |> List.mapi (fun i v -> i, v) |> List.minBy (fun (_,v) -> v)
@@ -83,7 +85,8 @@ let rec radiance (ray: Ray, old_depth: int) : Vec =
     let depth = old_depth + 1
     let (sphereId, t) = intersect(ray)
     match t=infinity with
-    | true  -> Vec.Zero()
+    | true  ->
+        Vec.Zero()
     | false ->
         let sph = spheres.[sphereId]
         let x = ray.Origin + ray.Direct * t
@@ -161,7 +164,7 @@ let render() =
             let d = cx *( ( (sx+0.5 + dx)/2.0 + x)/w - 0.5) + 
                     cy *( ( (sy+0.5 + dy)/2.0 + y)/h - 0.5) + cam.Direct
             radiance({Origin=cam.Origin+d*140.0; Direct=d.Norm()}, 0)
-
+            
         let goThrough = [
             for sx in [0..1] do
                 for sy in [0..1] do
@@ -170,18 +173,18 @@ let render() =
                         let dy = match r2 < 1.0 with | true -> sqrt(r2) - 1.0 | false -> 1.0 - sqrt(2.0-r2)
                         yield (sampleSubPixel (float sx) (float sy) dx dy)
             ]
-        goThrough |> List.sum
+        goThrough |> List.sum |> (fun x -> x * (0.25 / (float gSamples)))
 
     let canvas = createImageCanvas(gWidth, gHeight)
     
-    for x in [0..gWidth-1] do
-        for y in [0..gHeight-1] do
-            printfn "pixel %i %i" x y
-            let pixel = samplePixel (float x) (float y)
-            let index = y * gWidth + x
-            canvas.[index * 3 + 0] <- toInt pixel.X
-            canvas.[index * 3 + 1] <- toInt pixel.Y
-            canvas.[index * 3 + 2] <- toInt pixel.Z
+    for index in [0..gWidth * gHeight - 1] do
+        let x = index % gWidth
+        let y = gHeight - 1 - index / gWidth
+        let pixel = samplePixel (float x) (float y)
+        canvas.[index * 3 + 0] <- toInt pixel.X
+        canvas.[index * 3 + 1] <- toInt pixel.Y
+        canvas.[index * 3 + 2] <- toInt pixel.Z
+        printfn "pixel %i %i" y x
             
     writeImage ("render.ppm", gWidth, gHeight, canvas)
 
