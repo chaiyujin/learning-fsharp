@@ -13,6 +13,8 @@ square 3
 let add x y = x + y
 add 2 3
 
+let makeLing (choice:int) (y:int) = choice + y
+
 let evens list = 
     let isEven x = x%2 = 0
     List.filter isEven list
@@ -82,6 +84,11 @@ printfn "A string %s, and something generic %A" "hello, world!" [1;2;3;4]
 // complex types
 printfn "twoTuple=%A\nPerson=%A\nTemp=%A\nEmployee=%A\n"
         twoTuple person1 temp worker
+
+// === changing ===
+
+let jchai = { jdoe with Person.Last="Chai" }
+printfn "Person=%A\n" jchai
 
 // === List functions ===
 // List.iter fun :  run function and return nothin
