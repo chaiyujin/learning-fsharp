@@ -62,7 +62,7 @@ type Sphere (radius: float, position: Vec, emission: Vec, color: Vec, reflect: R
                 | true -> b+qdet
                 | false -> infinity
 // === spheres ===
-let spheres = [
+let spheres = [|
     Sphere(1e5, Vec(  1.0e5+1.0,        40.8,         81.6), Vec.Zero(), Vec(0.75, 0.25, 0.25), DIFF); // left
     Sphere(1e5, Vec(-1.0e5+99.0,        40.8,         81.6), Vec.Zero(), Vec(0.25, 0.25, 0.75), DIFF); // right
     Sphere(1e5, Vec(       50.0,        40.8,        1.0e5), Vec.Zero(), Vec(0.75, 0.75, 0.75), DIFF); // back
@@ -72,16 +72,15 @@ let spheres = [
     Sphere(16.5, Vec(27.0,       16.5, 47.0), Vec.Zero(), Vec(1.0, 1.0, 1.0) * 0.999, SPEC);   // mirror
     Sphere(16.5, Vec(73.0,       16.5, 78.0), Vec.Zero(), Vec(1.0, 1.0, 1.0) * 0.999, REFR);   // glas
     Sphere(600.0,Vec(50.0, 681.6-0.27, 81.6), Vec(12.0,12.0,12.0), Vec.Zero(),        DIFF);   // LITE
-]
+|]
 // === helper functions ===
 let clamp (x:float):float = match x < 0.0 with | true -> 0.0 | false -> match x > 1.0 with | true -> 1.0 | false -> x
 let toInt (x:float):int = int (Math.Pow(clamp(x),1.0/2.2)*255.0+0.5)
 let intersect (ray:Ray) =
-    let testResult = spheres |> List.map (fun x -> x.Intersect(ray))
-    testResult |> List.mapi (fun i v -> i, v) |> List.minBy (fun (_,v) -> v)
+    let testResult = spheres |> Array.map (fun x -> x.Intersect(ray))
+    testResult |> Array.mapi (fun i v -> i, v) |> Array.minBy (fun (_,v) -> v)
 // the ray tracer
-let random = new Random()
-let rec radiance (ray: Ray, old_depth: int) : Vec =
+let rec radiance (ray: Ray, old_depth: int, random: Random) : Vec =
     let depth = old_depth + 1
     let (sphereId, t) = intersect(ray)
     match t=infinity with
@@ -103,7 +102,7 @@ let rec radiance (ray: Ray, old_depth: int) : Vec =
                     | true  -> sph.C * (1.0 / p)
                     | false -> sph.C
             match sph.Reflect with
-            | SPEC -> sph.E + f * radiance({Origin=x; Direct=ray.Direct-n*2.0*n.Dot(ray.Direct)}, depth)
+            | SPEC -> sph.E + f * radiance({Origin=x; Direct=ray.Direct-n*2.0*n.Dot(ray.Direct)}, depth, random)
             | DIFF -> // ideal diffuse
                 let r1 = 2.0 * Math.PI * random.NextDouble()
                 let r2 = random.NextDouble()
@@ -114,7 +113,7 @@ let rec radiance (ray: Ray, old_depth: int) : Vec =
                         | false-> Vec(1.0, 0.0, 0.0).Cross(w).Norm()
                 let v = w.Cross(u)
                 let d = (u * Math.Cos(r1)*r2s + v*Math.Sin(r1)*r2s + w*sqrt(1.0-r2)).Norm()
-                sph.E + f * radiance({Origin=x; Direct=d}, depth)
+                sph.E + f * radiance({Origin=x; Direct=d}, depth, random)
             | REFR -> // ideal dielectric refraction
                 let reflRay = {Origin=x; Direct=ray.Direct-n*2.0*n.Dot(ray.Direct)}
                 let into = n.Dot(nl) > 0.0
@@ -125,7 +124,7 @@ let rec radiance (ray: Ray, old_depth: int) : Vec =
                 let cos2t = 1.0-nnt*nnt*(1.0-ddn*ddn)
                 if cos2t < 0.0 then
                     // total internal reflection
-                    sph.E + f * radiance(reflRay, depth)
+                    sph.E + f * radiance(reflRay, depth, random)
                 else
                     let sign = match into with | true -> 1.0 | false -> -1.0
                     let tdir = (ray.Direct * nnt - n * (sign * (ddn*nnt+sqrt(cos2t)))).Norm()
@@ -143,10 +142,10 @@ let rec radiance (ray: Ray, old_depth: int) : Vec =
                         match depth > 2 with
                         | true -> 
                             match random.NextDouble() < P with
-                            | true -> radiance(reflRay, depth) * RP
-                            | false-> radiance({Origin=x; Direct=tdir}, depth) * TP
+                            | true -> radiance(reflRay, depth, random) * RP
+                            | false-> radiance({Origin=x; Direct=tdir}, depth, random) * TP
                         | false ->
-                            radiance(reflRay, depth) * Re + radiance({Origin=x; Direct=tdir}, depth) * Tr
+                            radiance(reflRay, depth, random) * Re + radiance({Origin=x; Direct=tdir}, depth, random) * Tr
                     )
 
 // == rendering ==
@@ -157,13 +156,13 @@ let render() =
     let w = float gWidth
     let h = float gHeight
 
-    let samplePixel x y =
+    let samplePixel x y (random:Random) =
         let r1 = 2.0 * random.NextDouble()
         let r2 = 2.0 * random.NextDouble()
         let sampleSubPixel sx sy dx dy =
             let d = cx *( ( (sx+0.5 + dx)/2.0 + x)/w - 0.5) + 
                     cy *( ( (sy+0.5 + dy)/2.0 + y)/h - 0.5) + cam.Direct
-            radiance({Origin=cam.Origin+d*140.0; Direct=d.Norm()}, 0)
+            radiance({Origin=cam.Origin+d*140.0; Direct=d.Norm()}, 0, random)
             
         let goThrough = [
             for sx in [0..1] do
@@ -177,14 +176,18 @@ let render() =
 
     let canvas = createImageCanvas(gWidth, gHeight)
     
-    for index in [0..gWidth * gHeight - 1] do
+    // let random = new random()
+    let random = new ThreadLocal<_>(fun () -> new Random(12345))
+    // for index in [0..gWidth * gHeight - 1] do
+    Parallel.For(0, gWidth * gHeight - 1, fun index -> 
         let x = index % gWidth
         let y = gHeight - 1 - index / gWidth
-        let pixel = samplePixel (float x) (float y)
+        let pixel = samplePixel (float x) (float y) random.Value
         canvas.[index * 3 + 0] <- toInt pixel.X
         canvas.[index * 3 + 1] <- toInt pixel.Y
         canvas.[index * 3 + 2] <- toInt pixel.Z
-        printfn "pixel %i %i" y x
+        // printfn "pixel %i %i" y x
+    ) |> ignore
             
     writeImage ("render.ppm", gWidth, gHeight, canvas)
 
